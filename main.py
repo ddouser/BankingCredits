@@ -3,6 +3,7 @@ import math
 from icecream import ic
 
 
+
 class Macrosphere:
     gameActive = None
     tax_rate = None
@@ -17,11 +18,11 @@ class Macrosphere:
     company_List = None
     economic_cycles_s = ["Expansion", "Peak", "Contraction", "Trough"]
     economic_cycle_n = 1  # Фаза экономического цикла
-
+    payoff = None
 
     @staticmethod
     def initialise():
-        Macrosphere.tax_rate = 0.2 # Tax Rate
+        Macrosphere.tax_rate = 0.2  # Tax Rate
         Macrosphere.global_unemployment_rate = 0.2  # Уровень безработицы
         Macrosphere.inflation = 1  # Уровень инфляции
         Macrosphere.current_year = 0
@@ -39,14 +40,23 @@ class Macrosphere:
         ic(Macrosphere.bank_List)
         ic(Macrosphere.company_List)
         Macrosphere.gameActive = True
+
     @staticmethod
     def summarise():
+        list_credits = []
         for company in Macrosphere.company_List:
-            pass
+            company.payoff = company.balance + company.innovation * company.capital
+            for i in company.credits:
+                list_credits.append(i)
+        for cr in list_credits:
+            for bank in Macrosphere.bank_List:
+                if cr.bank_id == bank.id:
+                    pass
         for bank in Macrosphere.bank_List:
-            
-            pass
+            bank.payoff = bank.capital
+            print(f"Payoff Bank: {bank.id,bank.payoff}")
         Macrosphere.payoff = Macrosphere.budget
+
     @staticmethod
     def countCredits():
         s = 0
@@ -72,7 +82,7 @@ class Macrosphere:
                 if credit.bank_id == 0:
                     s0 += credit.body
         print(f"Borrower sum_debt: {sum_debt}")
-        print(f"Borrower sum_debt0  sum_debt1: {s0,sum_debt-s0}")
+        print(f"Borrower sum_debt0  sum_debt1: {s0, sum_debt - s0}")
 
     @staticmethod
     def generate_credits(sum_credit, bank):
@@ -102,12 +112,8 @@ class Macrosphere:
                                     min(100, Macrosphere.inflation + 0.3 * Macrosphere.consumer_capacity_rate - old_c))
 
 
-
-
-
-
 class Credit:
-    def __init__(self, body, interest_rate, credit_id, bank_id, company_id, result,period = 10):
+    def __init__(self, body, interest_rate, credit_id, bank_id, company_id, result, period=10):
         self.body = body
         self.initial_body = body
         self.interest_rate = interest_rate
@@ -116,7 +122,7 @@ class Credit:
         self.company_id = company_id
         self.date_given = Macrosphere.current_year
         self.result = result
-        self.date_paid = Macrosphere.current_year+period
+        self.date_paid = Macrosphere.current_year + period
 
 
 class Bank:
@@ -126,6 +132,7 @@ class Bank:
         self.company = []
         self.id = len(Macrosphere.bank_List)
         Macrosphere.bank_List.append(self)
+        self.payoff = 0
 
     def determine_interest_rate(self, company):
         # Простая логика определения процентной ставки на основе рейтинга кредитора
@@ -169,7 +176,7 @@ class company:
         self.size = random.randint(1, 15) * 100
         self.capital = random.randint(5, 10) * 100 * 1000
         self.balance = 0
-        self.innovation = random.randint(0, 100)/100  # "Айтишность" компании
+        self.innovation = random.randint(0, 100) / 100  # "Айтишность" компании
         self.credits = []
         self.id = len(Macrosphere.company_List)
 
@@ -177,6 +184,7 @@ class company:
         self.income = self.calculate_income()  # Годовой доход
         self.rating = None
         self.last_rating_year = 0  # день когда последний раз проводили оценку
+        self.payoff = 0
 
     def debt(self):
         s = 0
@@ -198,13 +206,18 @@ class company:
         lamda = 10 - (9 * self.innovation)
         age_factor = 1 - math.exp(-self.age / lamda)  # Вычисление AgeFactor
         debts_interest = 0
-        new_cr=[]
+        new_cr = []
         for credit in self.credits:
-            debts_interest += (credit.interest_rate / 100 + 1) * credit.body + credit.initial_body/(credit.date_paid-credit.date_given)
-            credit.body -= credit.initial_body/(credit.date_paid-credit.date_given)
-            if credit.date_paid>=Macrosphere.current_year:
+            debts_interest += (credit.interest_rate / 100 + 1) * credit.body + credit.initial_body / (
+                    credit.date_paid - credit.date_given)
+            credit.body -= credit.initial_body / (credit.date_paid - credit.date_given)
+            for bank in Macrosphere.bank_List:
+                if credit.bank_id == bank.id:
+                    bank.capital += (credit.interest_rate / 100 + 1) * credit.body + credit.initial_body / (
+                            credit.date_paid - credit.date_given)
+            if credit.date_paid >= Macrosphere.current_year:
                 new_cr.append(credit)
-        self.credits=new_cr
+        self.credits = new_cr
         # self.income = self.capital  * (1 + self.innovation) * age_factor - debts_interest - (self.employment_rate * self.size * 1000)
         # Расчет базового дохода
         base_income = self.capital * (1 + self.innovation) * age_factor
@@ -222,7 +235,7 @@ class company:
 
         if self.income > 1000:  # Taxes
             Macrosphere.budget += self.income * Macrosphere.tax_rate
-            self.income = self.income * (1-Macrosphere.tax_rate)
+            self.income = self.income * (1 - Macrosphere.tax_rate)
         # TODO Calculus
         return self.income
 
@@ -238,6 +251,9 @@ class company:
                 if off.interest_rate <= best_offer.interest_rate:
                     best_offer = off
             self.balance += best_offer.body
+            for bank in Macrosphere.bank_List:
+                if best_offer.bank_id == bank.id:
+                    bank.capital -= best_offer.body
             self.credits.append(best_offer)
             ic(len(self.credits), self.id)
         else:
@@ -256,14 +272,15 @@ if __name__ == '__main__':
     # "3" -
     #
     Macrosphere.gametype = "1"
-    a=0
+    a = 0
     while Macrosphere.gameActive:
 
         Macrosphere.display_macro_factors()
-        if a<Macrosphere.current_year:
-            a=int(input())
-
-            pass
+        if not a:
+            a = int(input("Игра до года:"))
+        if Macrosphere.current_year>a and a!=0:
+            Macrosphere.summarise()
+            break
 
         Macrosphere.current_year += 1
         Macrosphere.calculus_end_day()
