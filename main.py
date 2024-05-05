@@ -3,7 +3,6 @@ import math
 from icecream import ic
 
 
-
 class Macrosphere:
     gameActive = None
     tax_rate = None
@@ -19,12 +18,16 @@ class Macrosphere:
     economic_cycles_s = ["Expansion", "Peak", "Contraction", "Trough"]
     economic_cycle_n = 1  # Фаза экономического цикла
     payoff = None
+    bankrupts_List = []
+    totalCreditCount = []
 
     @staticmethod
     def initialise():
+        Macrosphere.totalCreditCount = [0,0]
+        Macrosphere.bankrupts_List = []
         Macrosphere.tax_rate = 0.2  # Tax Rate
         Macrosphere.global_unemployment_rate = 0.2  # Уровень безработицы
-        Macrosphere.inflation = 1  # Уровень инфляции
+        Macrosphere.inflation = 10  # Уровень инфляции
         Macrosphere.current_year = 0
         Macrosphere.curr_credit_id = 0
         Macrosphere.bank_List = []
@@ -37,8 +40,8 @@ class Macrosphere:
             Macrosphere.company_List.append(company())
         bank1 = Bank(1000000)
         bank2 = Bank(1000000)
-        ic(Macrosphere.bank_List)
-        ic(Macrosphere.company_List)
+        # ic(Macrosphere.bank_List)
+        # ic(Macrosphere.company_List)
         Macrosphere.gameActive = True
 
     @staticmethod
@@ -48,13 +51,17 @@ class Macrosphere:
             company.payoff = company.balance + company.innovation * company.capital
             for i in company.credits:
                 list_credits.append(i)
+        bc = []
+        for i in range(len(Macrosphere.bank_List)):
+            bc.append(0)
         for cr in list_credits:
             for bank in Macrosphere.bank_List:
                 if cr.bank_id == bank.id:
-                    pass
+                    bc[bank.id] += cr.body
+
         for bank in Macrosphere.bank_List:
-            bank.payoff = bank.capital
-            print(f"Payoff Bank: {bank.id,bank.payoff}")
+            bank.payoff = bank.capital - bc[bank.id] - bank.debt
+            print(f"Payoff Bank: {bank.id, bank.payoff}")
         Macrosphere.payoff = Macrosphere.budget
 
     @staticmethod
@@ -67,13 +74,11 @@ class Macrosphere:
     @staticmethod
     def display_macro_factors():
         print(f"Year: {Macrosphere.current_year}")
-        print(f"Unemployment Rate: {Macrosphere.global_unemployment_rate * 100}%")
-        print(f"Economic Cycle: {Macrosphere.economic_cycles_s[Macrosphere.economic_cycle_n]}")
-        print(f"Inflation Rate: {Macrosphere.inflation}%")
-        print(f"Consumer_capacity_rate: {Macrosphere.consumer_capacity_rate}")
+        print(f"Employment : {round(Macrosphere.global_unemployment_rate, 2) * 100}%")
+        # print(f"Economic Cycle: {Macrosphere.economic_cycles_s[Macrosphere.economic_cycle_n]}")
+        print(f"Inflation : {round(Macrosphere.inflation, 2)}%")
+        print(f"Consumer_capacity_rate: {round(Macrosphere.consumer_capacity_rate, 2) * 100}%")
 
-        for i in Macrosphere.bank_List:
-            ic(i.debt)
         sum_debt = 0
         s0 = 0
         for i in Macrosphere.company_List:
@@ -102,14 +107,15 @@ class Macrosphere:
             # Ask for credit?
         s = []
         for c in Macrosphere.company_List:
+            c.income_history.append(c.income)
             s.append(c.employment_rate)
+            # ic(c.employment_rate)
         old_c = Macrosphere.consumer_capacity_rate
-        ic(s)
+
         Macrosphere.global_unemployment_rate = sum(s) / len(s)
-        Macrosphere.consumer_capacity_rate = max(0, min(1, 0.6 * sum(s) / len(s) - 0.4 * (
-                Macrosphere.inflation - Macrosphere.global_interest_rate) / Macrosphere.global_interest_rate))
-        Macrosphere.inflation = max(0,
-                                    min(100, Macrosphere.inflation + 0.3 * Macrosphere.consumer_capacity_rate - old_c))
+        Macrosphere.consumer_capacity_rate = max(0.01, min(1, sum(s) / len(s)))
+        Macrosphere.inflation = max(0.01,
+                                    min(100, Macrosphere.inflation + 0.8 * Macrosphere.consumer_capacity_rate - old_c))
 
 
 class Credit:
@@ -128,7 +134,7 @@ class Credit:
 class Bank:
     def __init__(self, capital):
         self.capital = capital
-        self.debt = 0
+        self.debt = capital
         self.company = []
         self.id = len(Macrosphere.bank_List)
         Macrosphere.bank_List.append(self)
@@ -136,9 +142,13 @@ class Bank:
 
     def determine_interest_rate(self, company):
         # Простая логика определения процентной ставки на основе рейтинга кредитора
-        if self.id == 1 and Macrosphere.gametype == "1":
-            return 5  # TODO GAME 1
-
+        if self.id == 0 and Macrosphere.gametype == "1":
+            return 10  # TODO GAME 1
+        if self.id == 0 and Macrosphere.gametype == "2":
+            return 10
+        if self.id == 1 and Macrosphere.gametype == "2" and len(company.income_history)>0:
+            company.rating = 500*(company.income-sum(company.income_history)/len(company.income_history))/sum(company.income_history)/len(company.income_history)
+            #input(company.rating)
         if company.rating > 750:
             return 5  # Низкий риск, низкая ставка
         elif company.rating > 500:
@@ -148,6 +158,7 @@ class Bank:
 
     def score_company(self, company):
         company.rating = self.creditScore(company)
+        # print(company.rating, company.income)
         Macrosphere.curr_credit_id += 1
         creditOffer = Credit(company.size, self.determine_interest_rate(company), Macrosphere.curr_credit_id,
                              bank_id=self.id, company_id=company.id, result=True)
@@ -158,9 +169,11 @@ class Bank:
         w1, w2, w3, w4 = 0.25, 0.25, 0.25, 0.25
 
         age_effect_value = 1 - math.exp(-company.age / 5)
-        profitability_effect_value = company.income
+        profitability_effect_value = sum(company.income_history) / len(company.income_history)
         debt_effect_value = 1 - company.debt() / company.capital
         volatility_effect_value = 1 - Macrosphere.inflation / 100
+
+        #ic(age_effect_value, profitability_effect_value, debt_effect_value, volatility_effect_value)
 
         credit_rating = (w1 * age_effect_value +
                          w2 * profitability_effect_value +
@@ -172,13 +185,14 @@ class Bank:
 class company:
     def __init__(self):
         self.employment_rate = random.randint(50, 100) / 100
-        self.age = random.randint(0, 10)
+        self.age = random.randint(1, 10)
         self.size = random.randint(1, 15) * 100
         self.capital = random.randint(5, 10) * 100 * 1000
         self.balance = 0
         self.innovation = random.randint(0, 100) / 100  # "Айтишность" компании
         self.credits = []
         self.id = len(Macrosphere.company_List)
+        self.income_history = []
 
         # self.credit_rating = rating  # Кредитный рейтинг
         self.income = self.calculate_income()  # Годовой доход
@@ -193,11 +207,12 @@ class company:
         return s
 
     def invest(self, investment_sum):
-        self.balance -= investment_sum
-        increment_inno = (1 / max(self.innovation, 0.01)) * (investment_sum / 1000)
-        self.innovation = max(0, min(1, self.innovation + increment_inno))
-        increment_emp = (1 / max(self.employment_rate, 0.01)) * (investment_sum / 500)
-        self.employment_rate = max(0, min(1, self.employment_rate + increment_emp))
+        if (self.balance > investment_sum):
+            self.balance -= investment_sum
+            increment_inno = (1 / max(self.innovation, 0.01)) * (investment_sum / 1000)
+            self.innovation = max(0.01, min(1, self.innovation + increment_inno))
+            increment_emp = (1 / max(self.employment_rate, 0.01)) * (investment_sum / 500)
+            self.employment_rate = max(0.01, min(1, self.employment_rate + increment_emp))
 
     def calculate_income(self):
 
@@ -220,23 +235,32 @@ class company:
         self.credits = new_cr
         # self.income = self.capital  * (1 + self.innovation) * age_factor - debts_interest - (self.employment_rate * self.size * 1000)
         # Расчет базового дохода
-        base_income = self.capital * (1 + self.innovation) * age_factor
-
+        base_income = self.capital * (1 + self.innovation) * (1 + age_factor) * (1 + (random.randint(0, 10) - 5) / 10)
+        # ic(self.capital * (1 + self.innovation) * age_factor)
+        # ic(self.capital,self.innovation,age_factor)
         # Вычитаем проценты по долгам
         income_after_debts = base_income - debts_interest
 
         # Расчет операционных расходов с учетом инноваций
         # Предполагаем, что каждый процент инновации увеличивает стоимость рабочей силы на 2%
-        labor_cost_multiplier = 1 + (self.innovation * 2)
-        operational_expenses = (self.employment_rate * self.size * 1000) * labor_cost_multiplier
 
+        # operational_expenses = (((0.5+self.employment_rate) * math.log(self.size)*40000) * (1 + (self.innovation)))
+        operational_expenses = (
+                    ((1 + self.employment_rate) * math.pow(math.log(self.size + 1), 1.5) * 70000) * math.exp(
+                self.innovation * 0.03))
+
+        # input(vars(self))
         # Расчет чистого дохода
         self.income = income_after_debts - operational_expenses
-
+        # ic(self.income, income_after_debts, operational_expenses)
+        if self.income < -10000:
+            pass
+        # ic(base_income,income_after_debts,operational_expenses)
         if self.income > 1000:  # Taxes
             Macrosphere.budget += self.income * Macrosphere.tax_rate
             self.income = self.income * (1 - Macrosphere.tax_rate)
         # TODO Calculus
+
         return self.income
 
     def look_for_credit(self):
@@ -255,10 +279,10 @@ class company:
                 if best_offer.bank_id == bank.id:
                     bank.capital -= best_offer.body
             self.credits.append(best_offer)
-            ic(len(self.credits), self.id)
+            Macrosphere.totalCreditCount[best_offer.bank_id] += 1
         else:
-            self.balance += 1000
-            self.employment_rate = (self.employment_rate * self.size - 100) / self.size
+            self.balance += 7000
+            self.capital = -10000
 
 
 if __name__ == '__main__':
@@ -267,18 +291,19 @@ if __name__ == '__main__':
     Macrosphere.initialise()
     print("Initialisation complete")
 
-    # "1" -
+    # "1" - Кредитный скоринг против низкой ставки
     # "2" -
     # "3" -
     #
-    Macrosphere.gametype = "1"
+    Macrosphere.gametype = "2"
     a = 0
     while Macrosphere.gameActive:
 
         Macrosphere.display_macro_factors()
         if not a:
-            a = int(input("Игра до года:"))
-        if Macrosphere.current_year>a and a!=0:
+            a = 100  # int(input("Игра до года:"))
+        if Macrosphere.current_year > a and a != 0:
+            ic(Macrosphere.totalCreditCount)
             Macrosphere.summarise()
             break
 
@@ -286,9 +311,23 @@ if __name__ == '__main__':
         Macrosphere.calculus_end_day()
 
         for i, company in enumerate(Macrosphere.company_List):
+            newl = []
             company.calculate_income()
             company.balance += company.income
-            company.invest(company.balance / 2)
+            company.invest(10000)
+            q = 0
             if company.balance <= -company.income:
                 company.look_for_credit()
-                # ic(company)
+                if q > 10 and company.balance <= -company.income:
+                    company.capital -= 1000
+                    company.balance += 700
+                    q = 0
+
+            if company.capital >= 0:
+                newl.append(company)
+            else:
+                Macrosphere.bankrupts_List.append(company)
+
+            Macrosphere.company_List = newl
+
+            # ic(company)
