@@ -2,7 +2,6 @@ import random
 import math
 from icecream import ic
 
-
 class Macrosphere:
     gameActive = None
     tax_rate = None
@@ -109,6 +108,8 @@ class Macrosphere:
         for c in Macrosphere.company_List:
             c.income_history.append(c.income)
             s.append(c.employment_rate)
+        for b in Macrosphere.bankrupts_List:
+            s.append(b.employment_rate)
             # ic(c.employment_rate)
         old_c = Macrosphere.consumer_capacity_rate
 
@@ -192,7 +193,7 @@ class company:
         self.innovation = random.randint(0, 100) / 100  # "Айтишность" компании
         self.credits = []
         self.id = len(Macrosphere.company_List)
-        self.income_history = []
+        self.income_history = [10000,10000+random.randint(-4,4)*1000,10000+random.randint(-8,8)*1000]
 
         # self.credit_rating = rating  # Кредитный рейтинг
         self.income = self.calculate_income()  # Годовой доход
@@ -326,6 +327,7 @@ if __name__ == '__main__':
             if company.capital >= 0:
                 newl.append(company)
             else:
+                company.employment_rate = 0
                 Macrosphere.bankrupts_List.append(company)
 
             Macrosphere.company_List = newl
