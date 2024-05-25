@@ -292,10 +292,7 @@ if __name__ == '__main__':
     Macrosphere.initialise()
     print("Initialisation complete")
 
-    # "1" - Кредитный скоринг против низкой ставки
-    # "2" -
-    # "3" -
-    #
+
     Macrosphere.gametype = "2"
     a = 0
     while Macrosphere.gameActive:
